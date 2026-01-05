@@ -8,37 +8,32 @@ declare namespace viewer {
     }
 }
 declare namespace viewer {
-    /**
-     * Fast string trimming implementation found at
-     * http://blog.stevenlevithan.com/archives/faster-trim-javascript
-     *
-     * Note that regex is good at removing leading space but
-     * bad at removing trailing space as it has to first go through
-     * the whole string.
-    */
-    function trim(str: string): string;
-}
-declare namespace viewer {
+    type Pspm = viewer.pwm.Pspm;
     /**
      * Draw motif logo from this function
     */
-    class LoadQueryTask {
+    export class LoadQueryTask {
         target_id: string;
-        motifPWM: Pspm;
         scaleLogo: number;
         render: MotifLogo;
-        constructor(target_id: string, pwm: Pspm | string, scale: number, render: MotifLogo);
+        /**
+         * the motif PWM matrix model
+        */
+        readonly motif: Pspm;
+        constructor(target_id: string, pwm: Pspm | string, scaleLogo: number, render: MotifLogo);
         run(): void;
         logo_1(alphabet: Alphabet, fine_text: string, pspm: Pspm): Logo;
         /**
          * Specifes that the element with the specified id
          * should be replaced with a generated logo.
         */
-        replace_logo(logo: Logo, replace_id: string, scale: number, title_txt: string, display_style: string): void;
+        replace_logo(logo: Logo, replace_id: string, scale: number, title_txt?: string, display_style?: string): void;
     }
+    export {};
 }
 declare namespace viewer {
-    class MotifLogo {
+    type Pspm = viewer.pwm.Pspm;
+    export class MotifLogo {
         task_queue: LoadQueryTask[];
         task_delay: number;
         draw_logo_on_canvas: CanvasRender;
@@ -59,6 +54,22 @@ declare namespace viewer {
         draw_trim_background(ctx: CanvasRenderingContext2D, metrics: LogoMetrics, pspm: Pspm, offset: number): void;
         size_logo_on_canvas(logo: Logo, canvas: HTMLCanvasElement, show_names: boolean, scale: number): void;
     }
+    export {};
+}
+declare namespace viewer {
+    /**
+     * math log(2) constant value
+    */
+    const log2: number;
+    /**
+     * Fast string trimming implementation found at
+     * http://blog.stevenlevithan.com/archives/faster-trim-javascript
+     *
+     * Note that regex is good at removing leading space but
+     * bad at removing trailing space as it has to first go through
+     * the whole string.
+    */
+    function trim(str: string): string;
 }
 declare namespace viewer {
     class Alphabet {
@@ -75,7 +86,7 @@ declare namespace viewer {
         toString(): string;
         getLetter(index: number): string;
         getBgfreq(index: number): number;
-        getColour(index: number): string;
+        getColour(index: number, strict?: boolean): string;
         isAmbig(index: number): boolean;
         getIndex(letter: string): number;
     }
@@ -94,7 +105,8 @@ declare namespace viewer.AlphabetColors {
     function proteinColor(alphabet: string): string;
 }
 declare namespace viewer {
-    class Logo {
+    type Pspm = viewer.pwm.Pspm;
+    export class Logo {
         alphabet: Alphabet;
         fine_text: string;
         pspm_list: Pspm[];
@@ -106,6 +118,7 @@ declare namespace viewer {
         getPspm(rowIndex: number): Pspm;
         getOffset(rowIndex: any): number;
     }
+    export {};
 }
 declare namespace viewer {
     /**
@@ -147,51 +160,6 @@ declare namespace viewer {
     }
 }
 declare namespace viewer {
-    const evalueRegexp: RegExp;
-    class Pspm {
-        name: string;
-        alph_length: number;
-        motif_length: number;
-        nsites: number;
-        evalue: number;
-        ltrim: number;
-        rtrim: number;
-        pspm: number[][];
-        constructor(matrix: Pspm | string | number[][], name?: string, ltrim?: number, rtrim?: number, nsites?: number, evalue?: number | string);
-        private parseInternal;
-        private createFromValueArray;
-        private matrixParseFromString;
-        /**
-         * copy constructor
-        */
-        private copyInternal;
-        copy(): Pspm;
-        reverse_complement(alphabet: Alphabet): Pspm;
-        get_stack(position: number, alphabet: Alphabet): Symbol[];
-        get_stack_ic(position: number, alphabet: Alphabet): number;
-        getError(alphabet: Alphabet): number;
-        get leftTrim(): number;
-        get rightTrim(): number;
-        /**
-         * 将当前的数据模型转换为Motif数据的字符串用于进行保存
-        */
-        as_pspm(): string;
-        as_pssm(alphabet: Alphabet, pseudo?: number): string;
-        toString(): string;
-    }
-}
-declare namespace viewer {
-    function parse_pspm_properties(str: string): any;
-    function parse_pspm_string(pspm_string: string): IPspm;
-    interface IPspm {
-        pspm: number[][];
-        motif_length: number;
-        alph_length: number;
-        nsites: number;
-        evalue: number;
-    }
-}
-declare namespace viewer {
     class RasterizedAlphabet {
         lookup: number[];
         rasters: HTMLCanvasElement[];
@@ -218,4 +186,54 @@ declare namespace viewer {
         toString(): string;
         static compareSymbol(sym1: Symbol, sym2: Symbol): number;
     }
+}
+declare namespace viewer.pwm {
+    interface IPspm {
+        pspm: number[][];
+        motif_length: number;
+        alph_length: number;
+        nsites: number;
+        evalue: number;
+    }
+}
+declare namespace viewer.pwm {
+    const evalueRegexp: RegExp;
+    class Pspm {
+        name: string;
+        alph_length: number;
+        motif_length: number;
+        nsites: number;
+        evalue: number;
+        ltrim: number;
+        rtrim: number;
+        /**
+         * the pwm matrix data
+        */
+        pspm: number[][];
+        constructor(matrix: Pspm | string | number[][], name?: string, ltrim?: number, rtrim?: number, nsites?: number, evalue?: number | string);
+        private parseInternal;
+        private createFromValueArray;
+        private matrixParseFromString;
+        /**
+         * copy constructor
+        */
+        private copyInternal;
+        copy(): Pspm;
+        reverse_complement(alphabet: Alphabet): Pspm;
+        get_stack(position: number, alphabet: Alphabet): Symbol[];
+        get_stack_ic(position: number, alphabet: Alphabet): number;
+        getError(alphabet: Alphabet): number;
+        get leftTrim(): number;
+        get rightTrim(): number;
+        /**
+         * 将当前的数据模型转换为Motif数据的字符串用于进行保存
+        */
+        as_pspm(): string;
+        as_pssm(alphabet: Alphabet, pseudo?: number): string;
+        toString(): string;
+    }
+}
+declare namespace viewer.pwm {
+    function parse_pspm_properties(str: string): any;
+    function parse_pspm_string(pspm_string: string): IPspm;
 }

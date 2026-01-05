@@ -125,46 +125,23 @@ var viewer;
     }());
     viewer.CanvasRender = CanvasRender;
 })(viewer || (viewer = {}));
-/// <reference path="../build/linq.d.ts" />
-var viewer;
-(function (viewer) {
-    /**
-     * Fast string trimming implementation found at
-     * http://blog.stevenlevithan.com/archives/faster-trim-javascript
-     *
-     * Note that regex is good at removing leading space but
-     * bad at removing trailing space as it has to first go through
-     * the whole string.
-    */
-    function trim(str) {
-        "use strict";
-        var ws, i;
-        str = str.replace(/^\s\s*/, '');
-        ws = /\s/;
-        i = str.length;
-        while (ws.test(str.charAt(--i)))
-            ;
-        return str.slice(0, i + 1);
-    }
-    viewer.trim = trim;
-})(viewer || (viewer = {}));
 var viewer;
 (function (viewer) {
     /**
      * Draw motif logo from this function
     */
     var LoadQueryTask = /** @class */ (function () {
-        function LoadQueryTask(target_id, pwm, scale, render) {
+        function LoadQueryTask(target_id, pwm, scaleLogo, render) {
             this.target_id = target_id;
-            this.motifPWM = typeof pwm == "string" ? new viewer.Pspm(pwm, null) : pwm;
-            this.scaleLogo = scale;
+            this.scaleLogo = scaleLogo;
             this.render = render;
+            this.motif = typeof pwm == "string" ? new viewer.pwm.Pspm(pwm, null) : pwm;
         }
         LoadQueryTask.prototype.run = function () {
             var alpha = new viewer.Alphabet("ACGT");
-            var query_pspm = new viewer.Pspm(this.motifPWM, null);
+            var query_pspm = new viewer.pwm.Pspm(this.motif, null);
             var logo = this.logo_1(alpha, "MEME Suite", query_pspm);
-            this.replace_logo(logo, this.target_id, this.scaleLogo, "Preview Logo", "block");
+            this.replace_logo(logo, this.target_id, this.scaleLogo);
         };
         LoadQueryTask.prototype.logo_1 = function (alphabet, fine_text, pspm) {
             "use strict";
@@ -176,19 +153,21 @@ var viewer;
         */
         LoadQueryTask.prototype.replace_logo = function (logo, replace_id, scale, title_txt, display_style) {
             "use strict";
+            if (title_txt === void 0) { title_txt = "Preview Logo"; }
+            if (display_style === void 0) { display_style = "block"; }
             var element = $ts("#" + replace_id);
             if (!replace_id) {
                 alert("Can't find specified id (".concat(replace_id, ")"));
                 return;
             }
-            //found the element!
+            // found the element!
             var canvas = CanvasHelper.createCanvas([500, 1200], replace_id, title_txt, display_style);
             if (canvas === null) {
                 return;
             }
-            //draw the logo on the canvas
+            // draw the logo on the canvas
             this.render.draw_logo_on_canvas.doRender(logo, canvas, null, scale);
-            //replace the element with the canvas
+            // replace the element with the canvas
             element.parentNode.replaceChild(canvas, element);
         };
         return LoadQueryTask;
@@ -393,6 +372,33 @@ var viewer;
     }());
     viewer.MotifLogo = MotifLogo;
 })(viewer || (viewer = {}));
+/// <reference path="../dev/linq.d.ts" />
+var viewer;
+(function (viewer) {
+    /**
+     * math log(2) constant value
+    */
+    viewer.log2 = Math.log(2);
+    /**
+     * Fast string trimming implementation found at
+     * http://blog.stevenlevithan.com/archives/faster-trim-javascript
+     *
+     * Note that regex is good at removing leading space but
+     * bad at removing trailing space as it has to first go through
+     * the whole string.
+    */
+    function trim(str) {
+        "use strict";
+        var ws = /\s/;
+        var i;
+        str = str.replace(/^\s\s*/, '');
+        i = str.length;
+        while (ws.test(str.charAt(--i)))
+            ;
+        return str.slice(0, i + 1);
+    }
+    viewer.trim = trim;
+})(viewer || (viewer = {}));
 var viewer;
 (function (viewer) {
     var Alphabet = /** @class */ (function () {
@@ -444,7 +450,7 @@ var viewer;
         Object.defineProperty(Alphabet.prototype, "isNucleotide", {
             get: function () {
                 //TODO basic method, make better
-                if (this.letter_count < 20) {
+                if (this.letter_count < 8) {
                     return true;
                 }
                 return false;
@@ -492,9 +498,15 @@ var viewer;
             }
             return this.freqs[index];
         };
-        Alphabet.prototype.getColour = function (index) {
+        Alphabet.prototype.getColour = function (index, strict) {
+            if (strict === void 0) { strict = false; }
             if (index < 0 || index >= this.letter_count) {
-                throw new Error("BAD_ALPHABET_INDEX");
+                if (strict) {
+                    throw new Error("BAD_ALPHABET_INDEX");
+                }
+                else {
+                    return "black";
+                }
             }
             if (this.isNucleotide) {
                 return viewer.AlphabetColors.nucleotideColor(this.alphabet[index]);
@@ -502,7 +514,6 @@ var viewer;
             else {
                 return viewer.AlphabetColors.proteinColor(this.alphabet[index]);
             }
-            return "black";
         };
         Alphabet.prototype.isAmbig = function (index) {
             if (index < 0 || index >= this.letter_count) {
@@ -740,496 +751,6 @@ var viewer;
 })(viewer || (viewer = {}));
 var viewer;
 (function (viewer) {
-    viewer.evalueRegexp = /^((?:[+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)|inf)$/;
-    var Pspm = /** @class */ (function () {
-        function Pspm(matrix, name, ltrim, rtrim, nsites, evalue) {
-            if (name === void 0) { name = null; }
-            if (ltrim === void 0) { ltrim = 0; }
-            if (rtrim === void 0) { rtrim = 0; }
-            if (nsites === void 0) { nsites = 20; }
-            if (evalue === void 0) { evalue = 0; }
-            this.pspm = [];
-            if (matrix instanceof Pspm) {
-                this.copyInternal(matrix);
-            }
-            else {
-                this.parseInternal(matrix, name, ltrim, rtrim, nsites, evalue);
-            }
-        }
-        Pspm.prototype.parseInternal = function (matrix, name, ltrim, rtrim, nsites, evalue) {
-            // check parameters
-            if (typeof ltrim === "undefined") {
-                ltrim = 0;
-            }
-            else if (typeof ltrim !== "number" || ltrim % 1 !== 0 || ltrim < 0) {
-                throw new Error("ltrim must be a non-negative integer, got: " + ltrim);
-            }
-            if (typeof rtrim === "undefined") {
-                rtrim = 0;
-            }
-            else if (typeof rtrim !== "number" || rtrim % 1 !== 0 || rtrim < 0) {
-                throw new Error("rtrim must be a non-negative integer, got: " + rtrim);
-            }
-            if (typeof nsites !== "undefined") {
-                if (typeof nsites !== "number" || nsites <= 0) {
-                    throw new Error("nsites must be a positive number, got: " + nsites);
-                }
-            }
-            if (typeof evalue !== "undefined") {
-                if (typeof evalue === "number") {
-                    if (evalue < 0) {
-                        throw new Error("evalue must be a non-negative number, got: " + evalue);
-                    }
-                    else {
-                        this.evalue = evalue;
-                    }
-                }
-                else if (typeof evalue === "string") {
-                    if (!viewer.evalueRegexp.test(evalue)) {
-                        throw "\"evalue must be a non-negative number, got: \"".concat(evalue, "\"");
-                    }
-                    else {
-                        this.evalue = parseFloat(evalue);
-                    }
-                }
-                else {
-                    throw new Error("evalue must be a non-negative number, got: " + evalue);
-                }
-            }
-            else {
-                this.evalue = undefined;
-            }
-            // set properties
-            this.name = name;
-            this.nsites = nsites;
-            this.ltrim = ltrim;
-            this.rtrim = rtrim;
-            if (typeof matrix === "string") {
-                // string constructor
-                this.matrixParseFromString(viewer.parse_pspm_string(matrix));
-            }
-            else {
-                // assume pspm is a nested array
-                this.createFromValueArray(matrix);
-            }
-        };
-        Pspm.prototype.createFromValueArray = function (matrix) {
-            var row_sum;
-            var delta;
-            this.motif_length = matrix.length;
-            this.alph_length = (matrix.length > 0 ? matrix[0].length : 0);
-            if (typeof this.nsites === "undefined") {
-                this.nsites = 20;
-            }
-            if (typeof this.evalue === "undefined") {
-                this.evalue = 0;
-            }
-            this.pspm = [];
-            // copy pspm and check
-            for (var row = 0; row < this.motif_length; row++) {
-                if (this.alph_length != matrix[row].length) {
-                    throw new Error("COLUMN_MISMATCH");
-                }
-                this.pspm[row] = [];
-                row_sum = 0;
-                for (var col = 0; col < this.alph_length; col++) {
-                    this.pspm[row][col] = matrix[row][col];
-                    row_sum += this.pspm[row][col];
-                }
-                delta = 0.1;
-                if (isNaN(row_sum) || (row_sum > 1 && (row_sum - 1) > delta) ||
-                    (row_sum < 1 && (1 - row_sum) > delta)) {
-                    throw new Error("INVALID_SUM");
-                }
-            }
-        };
-        Pspm.prototype.matrixParseFromString = function (data) {
-            this.alph_length = data.alph_length;
-            this.motif_length = data.motif_length;
-            this.pspm = data.pspm;
-            if (typeof this.evalue === "undefined") {
-                if (typeof data.evalue !== "undefined") {
-                    this.evalue = data.evalue;
-                }
-                else {
-                    this.evalue = 0;
-                }
-            }
-            if (typeof this.nsites === "undefined") {
-                if (typeof data.nsites === "number") {
-                    this.nsites = data.nsites;
-                }
-                else {
-                    this.nsites = 20;
-                }
-            }
-        };
-        /**
-         * copy constructor
-        */
-        Pspm.prototype.copyInternal = function (matrix) {
-            this.alph_length = matrix.alph_length;
-            this.motif_length = matrix.motif_length;
-            this.name = matrix.name;
-            this.nsites = matrix.nsites;
-            this.evalue = matrix.evalue;
-            this.ltrim = matrix.ltrim;
-            this.rtrim = matrix.rtrim;
-            this.pspm = [];
-            for (var row = 0; row < matrix.motif_length; row++) {
-                this.pspm[row] = [];
-                for (var col = 0; col < matrix.alph_length; col++) {
-                    this.pspm[row][col] = matrix.pspm[row][col];
-                }
-            }
-        };
-        Pspm.prototype.copy = function () {
-            return new Pspm(this);
-        };
-        Pspm.prototype.reverse_complement = function (alphabet) {
-            "use strict";
-            var x, y, temp, a_index, c_index, g_index, t_index, i, row, temp_trim;
-            if (this.alph_length != alphabet.size) {
-                throw new Error("ALPHABET_MISMATCH");
-            }
-            if (!alphabet.isNucleotide) {
-                throw new Error("NO_PROTEIN_RC");
-            }
-            //reverse
-            x = 0;
-            y = this.motif_length - 1;
-            while (x < y) {
-                temp = this.pspm[x];
-                this.pspm[x] = this.pspm[y];
-                this.pspm[y] = temp;
-                x++;
-                y--;
-            }
-            //complement
-            a_index = alphabet.getIndex("A");
-            c_index = alphabet.getIndex("C");
-            g_index = alphabet.getIndex("G");
-            t_index = alphabet.getIndex("T");
-            for (i = 0; i < this.motif_length; i++) {
-                row = this.pspm[i];
-                //swap A and T
-                temp = row[a_index];
-                row[a_index] = row[t_index];
-                row[t_index] = temp;
-                //swap C and G
-                temp = row[c_index];
-                row[c_index] = row[g_index];
-                row[g_index] = temp;
-            }
-            //swap triming
-            temp_trim = this.ltrim;
-            this.ltrim = this.rtrim;
-            this.rtrim = temp_trim;
-            // note that ambigs are ignored because they don't effect motifs
-            // allow function chaining...
-            return this;
-        };
-        Pspm.prototype.get_stack = function (position, alphabet) {
-            "use strict";
-            var row;
-            var stack_ic, alphabet_ic, stack;
-            var sym;
-            if (this.alph_length != alphabet.size) {
-                throw new Error("ALPHABET_MISMATCH");
-            }
-            row = this.pspm[position];
-            stack_ic = this.get_stack_ic(position, alphabet);
-            alphabet_ic = alphabet.ic;
-            stack = [];
-            for (var i = 0; i < this.alph_length; i++) {
-                if (alphabet.isAmbig(i)) {
-                    continue;
-                }
-                sym = new viewer.Symbol(i, row[i] * stack_ic / alphabet_ic, alphabet);
-                if (sym.scale <= 0) {
-                    continue;
-                }
-                stack.push(sym);
-            }
-            stack.sort(viewer.Symbol.compareSymbol);
-            return stack;
-        };
-        ;
-        Pspm.prototype.get_stack_ic = function (position, alphabet) {
-            "use strict";
-            if (this.alph_length != alphabet.size) {
-                throw new Error("ALPHABET_MISMATCH");
-            }
-            var row = this.pspm[position];
-            var H = 0;
-            for (var i = 0; i < this.alph_length; i++) {
-                if (alphabet.isAmbig(i)) {
-                    continue;
-                }
-                if (row[i] === 0) {
-                    continue;
-                }
-                H -= (row[i] * (Math.log(row[i]) / Math.LN2));
-            }
-            return alphabet.ic - H;
-        };
-        Pspm.prototype.getError = function (alphabet) {
-            "use strict";
-            var asize;
-            if (this.nsites === 0) {
-                return 0;
-            }
-            if (alphabet.isNucleotide) {
-                asize = 4;
-            }
-            else {
-                asize = 20;
-            }
-            return (asize - 1) / (2 * Math.log(2) * this.nsites);
-        };
-        Object.defineProperty(Pspm.prototype, "leftTrim", {
-            get: function () {
-                "use strict";
-                return this.ltrim;
-            },
-            enumerable: false,
-            configurable: true
-        });
-        Object.defineProperty(Pspm.prototype, "rightTrim", {
-            get: function () {
-                "use strict";
-                return this.rtrim;
-            },
-            enumerable: false,
-            configurable: true
-        });
-        /**
-         * 将当前的数据模型转换为Motif数据的字符串用于进行保存
-        */
-        Pspm.prototype.as_pspm = function () {
-            "use strict";
-            var out = "letter-probability matrix: alength= " + this.alph_length +
-                " w= " + this.motif_length + " nsites= " + this.nsites +
-                " E= " + (typeof this.evalue === "number" ?
-                this.evalue.toExponential() : this.evalue) + "\n";
-            for (var row = 0; row < this.motif_length; row++) {
-                for (var col = 0; col < this.alph_length; col++) {
-                    if (col !== 0) {
-                        out += " ";
-                    }
-                    out += this.pspm[row][col].toFixed(6);
-                }
-                out += "\n";
-            }
-            return out;
-        };
-        Pspm.prototype.as_pssm = function (alphabet, pseudo) {
-            "use strict";
-            if (pseudo === void 0) { pseudo = null; }
-            var p, bg, p2, score;
-            if (typeof pseudo === "undefined") {
-                pseudo = 0.1;
-            }
-            else if (typeof pseudo !== "number") {
-                throw new Error("Expected number for pseudocount");
-            }
-            var out = "log-odds matrix: alength= " + this.alph_length +
-                " w= " + this.motif_length +
-                " E= " + (typeof this.evalue == "number" ?
-                this.evalue.toExponential() : this.evalue) + "\n";
-            var log2 = Math.log(2);
-            var total = this.nsites + pseudo;
-            for (var row = 0; row < this.motif_length; row++) {
-                for (var col = 0; col < this.alph_length; col++) {
-                    if (col !== 0) {
-                        out += " ";
-                    }
-                    p = this.pspm[row][col];
-                    // to avoid log of zero we add a pseudo count
-                    bg = alphabet.getBgfreq(col);
-                    p2 = (p * this.nsites + bg * pseudo) / total;
-                    // now calculate the score
-                    score = -10000;
-                    if (p2 > 0) {
-                        score = Math.round((Math.log(p2 / bg) / log2) * 100);
-                    }
-                    out += score;
-                }
-                out += "\n";
-            }
-            return out;
-        };
-        Pspm.prototype.toString = function () {
-            "use strict";
-            var str = "";
-            var row;
-            for (var i = 0; i < this.pspm.length; i++) {
-                row = this.pspm[i];
-                str += row.join("\t") + "\n";
-            }
-            return str;
-        };
-        return Pspm;
-    }());
-    viewer.Pspm = Pspm;
-})(viewer || (viewer = {}));
-var viewer;
-(function (viewer) {
-    function parse_pspm_properties(str) {
-        "use strict";
-        var parts, i, eqpos, before, after, properties, prop, num, num_re;
-        num_re = /^((?:[+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)|inf)$/;
-        parts = viewer.trim(str).split(/\s+/);
-        // split up words containing =
-        for (i = 0; i < parts.length;) {
-            eqpos = parts[i].indexOf("=");
-            if (eqpos != -1) {
-                before = parts[i].substr(0, eqpos);
-                after = parts[i].substr(eqpos + 1);
-                if (before.length > 0 && after.length > 0) {
-                    parts.splice(i, 1, before, "=", after);
-                    i += 3;
-                }
-                else if (before.length > 0) {
-                    parts.splice(i, 1, before, "=");
-                    i += 2;
-                }
-                else if (after.length > 0) {
-                    parts.splice(i, 1, "=", after);
-                    i += 2;
-                }
-                else {
-                    parts.splice(i, 1, "=");
-                    i++;
-                }
-            }
-            else {
-                i++;
-            }
-        }
-        properties = {};
-        for (i = 0; i < parts.length; i += 3) {
-            if (parts.length - i < 3) {
-                throw new Error("Expected PSPM property was incomplete. " +
-                    "Remaing parts are: " + parts.slice(i).join(" "));
-            }
-            if (parts[i + 1] !== "=") {
-                throw new Error("Expected '=' in PSPM property between key and " +
-                    "value but got " + parts[i + 1]);
-            }
-            prop = parts[i].toLowerCase();
-            num = parts[i + 2];
-            if (!num_re.test(num)) {
-                throw new Error("Expected numeric value for PSPM property '" +
-                    prop + "' but got '" + num + "'");
-            }
-            properties[prop] = num;
-        }
-        return properties;
-    }
-    viewer.parse_pspm_properties = parse_pspm_properties;
-    function parse_pspm_string(pspm_string) {
-        "use strict";
-        var header_re, lines, first_line, line_num, col_num, alph_length, motif_length, nsites, evalue, pspm, i, line, match, props, parts, j, prob;
-        header_re = /^letter-probability\s+matrix:(.*)$/i;
-        lines = pspm_string.split(/\n/);
-        first_line = true;
-        line_num = 0;
-        col_num = 0;
-        alph_length;
-        motif_length;
-        nsites;
-        evalue;
-        pspm = [];
-        for (i = 0; i < lines.length; i++) {
-            line = viewer.trim(lines[i]);
-            if (line.length === 0) {
-                continue;
-            }
-            // check the first line for a header though allow matrices without it
-            if (first_line) {
-                first_line = false;
-                match = header_re.exec(line);
-                if (match !== null) {
-                    props = parse_pspm_properties(match[1]);
-                    if (props.hasOwnProperty("alength")) {
-                        alph_length = parseFloat(props["alength"]);
-                        if (alph_length != 4 && alph_length != 20) {
-                            throw new Error("PSPM property alength should be 4 or 20" +
-                                " but got " + alph_length);
-                        }
-                    }
-                    if (props.hasOwnProperty("w")) {
-                        motif_length = parseFloat(props["w"]);
-                        if (motif_length % 1 !== 0 || motif_length < 1) {
-                            throw new Error("PSPM property w should be an integer larger " +
-                                "than zero but got " + motif_length);
-                        }
-                    }
-                    if (props.hasOwnProperty("nsites")) {
-                        nsites = parseFloat(props["nsites"]);
-                        if (nsites <= 0) {
-                            throw new Error("PSPM property nsites should be larger than " +
-                                "zero but got " + nsites);
-                        }
-                    }
-                    if (props.hasOwnProperty("e")) {
-                        evalue = props["e"];
-                        if (evalue < 0) {
-                            throw new Error("PSPM property evalue should be " +
-                                "non-negative but got " + evalue);
-                        }
-                    }
-                    continue;
-                }
-            }
-            pspm[line_num] = [];
-            col_num = 0;
-            parts = line.split(/\s+/);
-            for (j = 0; j < parts.length; j++) {
-                prob = parseFloat(parts[j]);
-                if (prob != parts[j] || prob < 0 || prob > 1) {
-                    throw new Error("Expected probability but got '" + parts[j] + "'");
-                }
-                pspm[line_num][col_num] = prob;
-                col_num++;
-            }
-            line_num++;
-        }
-        if (typeof motif_length === "number") {
-            if (pspm.length != motif_length) {
-                throw new Error("Expected PSPM to have a motif length of " +
-                    motif_length + " but it was actually " + pspm.length);
-            }
-        }
-        else {
-            motif_length = pspm.length;
-        }
-        if (typeof alph_length !== "number") {
-            alph_length = pspm[0].length;
-            if (alph_length != 4 && alph_length != 20) {
-                throw new Error("Expected length of first row in the PSPM to be " +
-                    "either 4 or 20 but got " + alph_length);
-            }
-        }
-        for (i = 0; i < pspm.length; i++) {
-            if (pspm[i].length != alph_length) {
-                throw new Error("Expected PSPM row " + i + " to have a length of " +
-                    alph_length + " but the length was " + pspm[i].length);
-            }
-        }
-        return {
-            pspm: pspm,
-            motif_length: motif_length,
-            alph_length: alph_length,
-            nsites: nsites,
-            evalue: evalue
-        };
-    }
-    viewer.parse_pspm_string = parse_pspm_string;
-})(viewer || (viewer = {}));
-var viewer;
-(function (viewer) {
     var RasterizedAlphabet = /** @class */ (function () {
         function RasterizedAlphabet(alphabet, font, target_width) {
             // variable prototypes
@@ -1453,5 +974,497 @@ var viewer;
         return Symbol;
     }());
     viewer.Symbol = Symbol;
+})(viewer || (viewer = {}));
+var viewer;
+(function (viewer) {
+    var pwm;
+    (function (pwm) {
+        pwm.evalueRegexp = /^((?:[+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)|inf)$/;
+        var Pspm = /** @class */ (function () {
+            function Pspm(matrix, name, ltrim, rtrim, nsites, evalue) {
+                if (name === void 0) { name = null; }
+                if (ltrim === void 0) { ltrim = 0; }
+                if (rtrim === void 0) { rtrim = 0; }
+                if (nsites === void 0) { nsites = 20; }
+                if (evalue === void 0) { evalue = 0; }
+                /**
+                 * the pwm matrix data
+                */
+                this.pspm = [];
+                if (matrix instanceof Pspm) {
+                    this.copyInternal(matrix);
+                }
+                else {
+                    this.parseInternal(matrix, name, ltrim, rtrim, nsites, evalue);
+                }
+            }
+            Pspm.prototype.parseInternal = function (matrix, name, ltrim, rtrim, nsites, evalue) {
+                // check parameters
+                if (typeof ltrim === "undefined") {
+                    ltrim = 0;
+                }
+                else if (typeof ltrim !== "number" || ltrim % 1 !== 0 || ltrim < 0) {
+                    throw new Error("ltrim must be a non-negative integer, got: " + ltrim);
+                }
+                if (typeof rtrim === "undefined") {
+                    rtrim = 0;
+                }
+                else if (typeof rtrim !== "number" || rtrim % 1 !== 0 || rtrim < 0) {
+                    throw new Error("rtrim must be a non-negative integer, got: " + rtrim);
+                }
+                if (typeof nsites !== "undefined") {
+                    if (typeof nsites !== "number" || nsites <= 0) {
+                        throw new Error("nsites must be a positive number, got: " + nsites);
+                    }
+                }
+                if (typeof evalue !== "undefined") {
+                    if (typeof evalue === "number") {
+                        if (evalue < 0) {
+                            throw new Error("evalue must be a non-negative number, got: " + evalue);
+                        }
+                        else {
+                            this.evalue = evalue;
+                        }
+                    }
+                    else if (typeof evalue === "string") {
+                        if (!pwm.evalueRegexp.test(evalue)) {
+                            throw "\"evalue must be a non-negative number, got: \"".concat(evalue, "\"");
+                        }
+                        else {
+                            this.evalue = parseFloat(evalue);
+                        }
+                    }
+                    else {
+                        throw new Error("evalue must be a non-negative number, got: " + evalue);
+                    }
+                }
+                else {
+                    this.evalue = undefined;
+                }
+                // set properties
+                this.name = name;
+                this.nsites = nsites;
+                this.ltrim = ltrim;
+                this.rtrim = rtrim;
+                if (typeof matrix === "string") {
+                    // string constructor
+                    this.matrixParseFromString(pwm.parse_pspm_string(matrix));
+                }
+                else {
+                    // assume pspm is a nested array
+                    this.createFromValueArray(matrix);
+                }
+            };
+            Pspm.prototype.createFromValueArray = function (matrix) {
+                var row_sum;
+                var delta;
+                this.motif_length = matrix.length;
+                this.alph_length = (matrix.length > 0 ? matrix[0].length : 0);
+                if (typeof this.nsites === "undefined") {
+                    this.nsites = 20;
+                }
+                if (typeof this.evalue === "undefined") {
+                    this.evalue = 0;
+                }
+                this.pspm = [];
+                // copy pspm and check
+                for (var row = 0; row < this.motif_length; row++) {
+                    if (this.alph_length != matrix[row].length) {
+                        throw new Error("COLUMN_MISMATCH");
+                    }
+                    this.pspm[row] = [];
+                    row_sum = 0;
+                    for (var col = 0; col < this.alph_length; col++) {
+                        this.pspm[row][col] = matrix[row][col];
+                        row_sum += this.pspm[row][col];
+                    }
+                    delta = 0.1;
+                    if (isNaN(row_sum) || (row_sum > 1 && (row_sum - 1) > delta) ||
+                        (row_sum < 1 && (1 - row_sum) > delta)) {
+                        throw new Error("INVALID_SUM");
+                    }
+                }
+            };
+            Pspm.prototype.matrixParseFromString = function (data) {
+                this.alph_length = data.alph_length;
+                this.motif_length = data.motif_length;
+                this.pspm = data.pspm;
+                if (typeof this.evalue === "undefined") {
+                    if (typeof data.evalue !== "undefined") {
+                        this.evalue = data.evalue;
+                    }
+                    else {
+                        this.evalue = 0;
+                    }
+                }
+                if (typeof this.nsites === "undefined") {
+                    if (typeof data.nsites === "number") {
+                        this.nsites = data.nsites;
+                    }
+                    else {
+                        this.nsites = 20;
+                    }
+                }
+            };
+            /**
+             * copy constructor
+            */
+            Pspm.prototype.copyInternal = function (matrix) {
+                this.alph_length = matrix.alph_length;
+                this.motif_length = matrix.motif_length;
+                this.name = matrix.name;
+                this.nsites = matrix.nsites;
+                this.evalue = matrix.evalue;
+                this.ltrim = matrix.ltrim;
+                this.rtrim = matrix.rtrim;
+                this.pspm = [];
+                for (var row = 0; row < matrix.motif_length; row++) {
+                    this.pspm[row] = [];
+                    for (var col = 0; col < matrix.alph_length; col++) {
+                        this.pspm[row][col] = matrix.pspm[row][col];
+                    }
+                }
+            };
+            Pspm.prototype.copy = function () {
+                return new Pspm(this);
+            };
+            Pspm.prototype.reverse_complement = function (alphabet) {
+                "use strict";
+                var x, y, temp, a_index, c_index, g_index, t_index, i, row, temp_trim;
+                if (this.alph_length != alphabet.size) {
+                    throw new Error("ALPHABET_MISMATCH");
+                }
+                if (!alphabet.isNucleotide) {
+                    throw new Error("NO_PROTEIN_RC");
+                }
+                //reverse
+                x = 0;
+                y = this.motif_length - 1;
+                while (x < y) {
+                    temp = this.pspm[x];
+                    this.pspm[x] = this.pspm[y];
+                    this.pspm[y] = temp;
+                    x++;
+                    y--;
+                }
+                //complement
+                a_index = alphabet.getIndex("A");
+                c_index = alphabet.getIndex("C");
+                g_index = alphabet.getIndex("G");
+                t_index = alphabet.getIndex("T");
+                for (i = 0; i < this.motif_length; i++) {
+                    row = this.pspm[i];
+                    //swap A and T
+                    temp = row[a_index];
+                    row[a_index] = row[t_index];
+                    row[t_index] = temp;
+                    //swap C and G
+                    temp = row[c_index];
+                    row[c_index] = row[g_index];
+                    row[g_index] = temp;
+                }
+                //swap triming
+                temp_trim = this.ltrim;
+                this.ltrim = this.rtrim;
+                this.rtrim = temp_trim;
+                // note that ambigs are ignored because they don't effect motifs
+                // allow function chaining...
+                return this;
+            };
+            Pspm.prototype.get_stack = function (position, alphabet) {
+                "use strict";
+                var row;
+                var stack_ic, alphabet_ic, stack;
+                var sym;
+                if (this.alph_length != alphabet.size) {
+                    throw new Error("ALPHABET_MISMATCH");
+                }
+                row = this.pspm[position];
+                stack_ic = this.get_stack_ic(position, alphabet);
+                alphabet_ic = alphabet.ic;
+                stack = [];
+                for (var i = 0; i < this.alph_length; i++) {
+                    if (alphabet.isAmbig(i)) {
+                        continue;
+                    }
+                    sym = new viewer.Symbol(i, row[i] * stack_ic / alphabet_ic, alphabet);
+                    if (sym.scale <= 0) {
+                        continue;
+                    }
+                    stack.push(sym);
+                }
+                stack.sort(viewer.Symbol.compareSymbol);
+                return stack;
+            };
+            ;
+            Pspm.prototype.get_stack_ic = function (position, alphabet) {
+                "use strict";
+                if (this.alph_length != alphabet.size) {
+                    throw new Error("ALPHABET_MISMATCH");
+                }
+                var row = this.pspm[position];
+                var H = 0;
+                for (var i = 0; i < this.alph_length; i++) {
+                    if (alphabet.isAmbig(i)) {
+                        continue;
+                    }
+                    if (row[i] === 0) {
+                        continue;
+                    }
+                    H -= (row[i] * (Math.log(row[i]) / Math.LN2));
+                }
+                return alphabet.ic - H;
+            };
+            Pspm.prototype.getError = function (alphabet) {
+                "use strict";
+                var asize;
+                if (this.nsites === 0) {
+                    return 0;
+                }
+                if (alphabet.isNucleotide) {
+                    asize = 4;
+                }
+                else {
+                    asize = 20;
+                }
+                return (asize - 1) / (2 * Math.log(2) * this.nsites);
+            };
+            Object.defineProperty(Pspm.prototype, "leftTrim", {
+                get: function () {
+                    "use strict";
+                    return this.ltrim;
+                },
+                enumerable: false,
+                configurable: true
+            });
+            Object.defineProperty(Pspm.prototype, "rightTrim", {
+                get: function () {
+                    "use strict";
+                    return this.rtrim;
+                },
+                enumerable: false,
+                configurable: true
+            });
+            /**
+             * 将当前的数据模型转换为Motif数据的字符串用于进行保存
+            */
+            Pspm.prototype.as_pspm = function () {
+                "use strict";
+                var out = "letter-probability matrix: alength= " + this.alph_length +
+                    " w= " + this.motif_length + " nsites= " + this.nsites +
+                    " E= " + (typeof this.evalue === "number" ?
+                    this.evalue.toExponential() : this.evalue) + "\n";
+                for (var row = 0; row < this.motif_length; row++) {
+                    for (var col = 0; col < this.alph_length; col++) {
+                        if (col !== 0) {
+                            out += " ";
+                        }
+                        out += this.pspm[row][col].toFixed(6);
+                    }
+                    out += "\n";
+                }
+                return out;
+            };
+            Pspm.prototype.as_pssm = function (alphabet, pseudo) {
+                "use strict";
+                if (pseudo === void 0) { pseudo = 0.1; }
+                var p, bg, p2, score;
+                var out = "log-odds matrix: alength= " + this.alph_length +
+                    " w= " + this.motif_length +
+                    " E= " + (typeof this.evalue == "number" ?
+                    this.evalue.toExponential() : this.evalue) + "\n";
+                var total = this.nsites + pseudo;
+                for (var row = 0; row < this.motif_length; row++) {
+                    for (var col = 0; col < this.alph_length; col++) {
+                        if (col !== 0) {
+                            out += " ";
+                        }
+                        p = this.pspm[row][col];
+                        // to avoid log of zero we add a pseudo count
+                        bg = alphabet.getBgfreq(col);
+                        p2 = (p * this.nsites + bg * pseudo) / total;
+                        // now calculate the score
+                        score = -10000;
+                        if (p2 > 0) {
+                            score = Math.round((Math.log(p2 / bg) / viewer.log2) * 100);
+                        }
+                        out += score;
+                    }
+                    out += "\n";
+                }
+                return out;
+            };
+            Pspm.prototype.toString = function () {
+                "use strict";
+                var str = "";
+                var row;
+                for (var i = 0; i < this.pspm.length; i++) {
+                    row = this.pspm[i];
+                    str += row.join("\t") + "\n";
+                }
+                return str;
+            };
+            return Pspm;
+        }());
+        pwm.Pspm = Pspm;
+    })(pwm = viewer.pwm || (viewer.pwm = {}));
+})(viewer || (viewer = {}));
+var viewer;
+(function (viewer) {
+    var pwm;
+    (function (pwm) {
+        function parse_pspm_properties(str) {
+            "use strict";
+            var parts, i, eqpos, before, after, properties, prop, num, num_re;
+            num_re = /^((?:[+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)|inf)$/;
+            parts = viewer.trim(str).split(/\s+/);
+            // split up words containing =
+            for (i = 0; i < parts.length;) {
+                eqpos = parts[i].indexOf("=");
+                if (eqpos != -1) {
+                    before = parts[i].substr(0, eqpos);
+                    after = parts[i].substr(eqpos + 1);
+                    if (before.length > 0 && after.length > 0) {
+                        parts.splice(i, 1, before, "=", after);
+                        i += 3;
+                    }
+                    else if (before.length > 0) {
+                        parts.splice(i, 1, before, "=");
+                        i += 2;
+                    }
+                    else if (after.length > 0) {
+                        parts.splice(i, 1, "=", after);
+                        i += 2;
+                    }
+                    else {
+                        parts.splice(i, 1, "=");
+                        i++;
+                    }
+                }
+                else {
+                    i++;
+                }
+            }
+            properties = {};
+            for (i = 0; i < parts.length; i += 3) {
+                if (parts.length - i < 3) {
+                    throw new Error("Expected PSPM property was incomplete. " +
+                        "Remaing parts are: " + parts.slice(i).join(" "));
+                }
+                if (parts[i + 1] !== "=") {
+                    throw new Error("Expected '=' in PSPM property between key and " +
+                        "value but got " + parts[i + 1]);
+                }
+                prop = parts[i].toLowerCase();
+                num = parts[i + 2];
+                if (!num_re.test(num)) {
+                    throw new Error("Expected numeric value for PSPM property '" +
+                        prop + "' but got '" + num + "'");
+                }
+                properties[prop] = num;
+            }
+            return properties;
+        }
+        pwm.parse_pspm_properties = parse_pspm_properties;
+        function parse_pspm_string(pspm_string) {
+            "use strict";
+            var header_re, lines, first_line, line_num, col_num, alph_length, motif_length, nsites, evalue, pspm, i, line, match, props, parts, j, prob;
+            header_re = /^letter-probability\s+matrix:(.*)$/i;
+            lines = pspm_string.split(/\n/);
+            first_line = true;
+            line_num = 0;
+            col_num = 0;
+            alph_length;
+            motif_length;
+            nsites;
+            evalue;
+            pspm = [];
+            for (i = 0; i < lines.length; i++) {
+                line = viewer.trim(lines[i]);
+                if (line.length === 0) {
+                    continue;
+                }
+                // check the first line for a header though allow matrices without it
+                if (first_line) {
+                    first_line = false;
+                    match = header_re.exec(line);
+                    if (match !== null) {
+                        props = parse_pspm_properties(match[1]);
+                        if (props.hasOwnProperty("alength")) {
+                            alph_length = parseFloat(props["alength"]);
+                            if (alph_length != 4 && alph_length != 20) {
+                                throw new Error("PSPM property alength should be 4 or 20" +
+                                    " but got " + alph_length);
+                            }
+                        }
+                        if (props.hasOwnProperty("w")) {
+                            motif_length = parseFloat(props["w"]);
+                            if (motif_length % 1 !== 0 || motif_length < 1) {
+                                throw new Error("PSPM property w should be an integer larger " +
+                                    "than zero but got " + motif_length);
+                            }
+                        }
+                        if (props.hasOwnProperty("nsites")) {
+                            nsites = parseFloat(props["nsites"]);
+                            if (nsites <= 0) {
+                                throw new Error("PSPM property nsites should be larger than " +
+                                    "zero but got " + nsites);
+                            }
+                        }
+                        if (props.hasOwnProperty("e")) {
+                            evalue = props["e"];
+                            if (evalue < 0) {
+                                throw new Error("PSPM property evalue should be " +
+                                    "non-negative but got " + evalue);
+                            }
+                        }
+                        continue;
+                    }
+                }
+                pspm[line_num] = [];
+                col_num = 0;
+                parts = line.split(/\s+/);
+                for (j = 0; j < parts.length; j++) {
+                    prob = parseFloat(parts[j]);
+                    if (prob != parts[j] || prob < 0 || prob > 1) {
+                        throw new Error("Expected probability but got '" + parts[j] + "'");
+                    }
+                    pspm[line_num][col_num] = prob;
+                    col_num++;
+                }
+                line_num++;
+            }
+            if (typeof motif_length === "number") {
+                if (pspm.length != motif_length) {
+                    throw new Error("Expected PSPM to have a motif length of " +
+                        motif_length + " but it was actually " + pspm.length);
+                }
+            }
+            else {
+                motif_length = pspm.length;
+            }
+            if (typeof alph_length !== "number") {
+                alph_length = pspm[0].length;
+                if (alph_length != 4 && alph_length != 20) {
+                    throw new Error("Expected length of first row in the PSPM to be " +
+                        "either 4 or 20 but got " + alph_length);
+                }
+            }
+            for (i = 0; i < pspm.length; i++) {
+                if (pspm[i].length != alph_length) {
+                    throw new Error("Expected PSPM row " + i + " to have a length of " +
+                        alph_length + " but the length was " + pspm[i].length);
+                }
+            }
+            return {
+                pspm: pspm,
+                motif_length: motif_length,
+                alph_length: alph_length,
+                nsites: nsites,
+                evalue: evalue
+            };
+        }
+        pwm.parse_pspm_string = parse_pspm_string;
+    })(pwm = viewer.pwm || (viewer.pwm = {}));
 })(viewer || (viewer = {}));
 //# sourceMappingURL=viewer.js.map
