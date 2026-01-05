@@ -24,7 +24,7 @@
 
         public get isNucleotide(): boolean {
             //TODO basic method, make better
-            if (this.letter_count < 20) {
+            if (this.letter_count < 8) {
                 return true;
             }
             return false;
@@ -106,17 +106,19 @@
             return this.freqs[index];
         }
 
-        public getColour(index: number): string {
+        public getColour(index: number, strict: boolean = false): string {
             if (index < 0 || index >= this.letter_count) {
-                throw new Error("BAD_ALPHABET_INDEX");
+                if (strict) {
+                    throw new Error("BAD_ALPHABET_INDEX");
+                } else {
+                    return "black";
+                }
             }
             if (this.isNucleotide) {
                 return AlphabetColors.nucleotideColor(this.alphabet[index]);
             } else {
                 return AlphabetColors.proteinColor(this.alphabet[index]);
             }
-
-            return "black";
         }
 
         public isAmbig(index: number): boolean {

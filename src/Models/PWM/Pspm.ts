@@ -11,6 +11,9 @@
         public evalue: number
         public ltrim: number
         public rtrim: number
+        /**
+         * the pwm matrix data
+        */
         public pspm: number[][] = [];
 
         public constructor(matrix: Pspm | string | number[][],
@@ -217,8 +220,8 @@
 
         public get_stack(position: number, alphabet: Alphabet) {
             "use strict";
-            var row:number[]
-            var stack_ic:number, alphabet_ic:number, stack: Symbol[]
+            var row: number[]
+            var stack_ic: number, alphabet_ic: number, stack: Symbol[]
             var sym: Symbol;
             if (this.alph_length != alphabet.size) {
                 throw new Error("ALPHABET_MISMATCH");
@@ -298,12 +301,13 @@
         public as_pspm(): string {
             "use strict";
 
-            var out = "letter-probability matrix: alength= " + this.alph_length +
+            let out = "letter-probability matrix: alength= " + this.alph_length +
                 " w= " + this.motif_length + " nsites= " + this.nsites +
                 " E= " + (typeof this.evalue === "number" ?
                     this.evalue.toExponential() : this.evalue) + "\n";
-            for (var row: number = 0; row < this.motif_length; row++) {
-                for (var col: number = 0; col < this.alph_length; col++) {
+
+            for (let row: number = 0; row < this.motif_length; row++) {
+                for (let col: number = 0; col < this.alph_length; col++) {
                     if (col !== 0) {
                         out += " ";
                     }
@@ -314,23 +318,16 @@
             return out;
         }
 
-        public as_pssm(alphabet: Alphabet, pseudo: number = null): string {
+        public as_pssm(alphabet: Alphabet, pseudo: number = 0.1): string {
             "use strict";
 
-            var p: number, bg: number, p2: number, score: number;
+            let p: number, bg: number, p2: number, score: number;
 
-            if (typeof pseudo === "undefined") {
-                pseudo = 0.1;
-            } else if (typeof pseudo !== "number") {
-                throw new Error("Expected number for pseudocount");
-            }
-
-            var out = "log-odds matrix: alength= " + this.alph_length +
+            let out = "log-odds matrix: alength= " + this.alph_length +
                 " w= " + this.motif_length +
                 " E= " + (typeof this.evalue == "number" ?
                     this.evalue.toExponential() : this.evalue) + "\n";
-            var log2 = Math.log(2);
-            var total = this.nsites + pseudo;
+            let total = this.nsites + pseudo;
 
             for (var row: number = 0; row < this.motif_length; row++) {
                 for (var col: number = 0; col < this.alph_length; col++) {

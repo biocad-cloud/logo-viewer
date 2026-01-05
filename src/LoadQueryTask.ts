@@ -5,24 +5,26 @@
     */
     export class LoadQueryTask {
 
-        public target_id: string;
-        public motifPWM: Pspm;
-        public scaleLogo: number;
-        public render: MotifLogo;
+        /**
+         * the motif PWM matrix model
+        */
+        public readonly motif: Pspm;
 
-        public constructor(target_id: string, pwm: Pspm | string, scale: number, render: MotifLogo) {
-            this.target_id = target_id;
-            this.motifPWM = typeof pwm == "string" ? new Pspm(pwm, null) : pwm;
-            this.scaleLogo = scale;
-            this.render = render;
+        public constructor(
+            public target_id: string,
+            pwm: Pspm | string,
+            public scaleLogo: number,
+            public render: MotifLogo) {
+
+            this.motif = typeof pwm == "string" ? new Pspm(pwm, null) : pwm;
         }
 
         public run() {
-            var alpha = new Alphabet("ACGT");
-            var query_pspm = new Pspm(this.motifPWM, null);
-            var logo = this.logo_1(alpha, "MEME Suite", query_pspm);
+            let alpha = new Alphabet("ACGT");
+            let query_pspm = new Pspm(this.motif, null);
+            let logo = this.logo_1(alpha, "MEME Suite", query_pspm);
 
-            this.replace_logo(logo, this.target_id, this.scaleLogo, "Preview Logo", "block");
+            this.replace_logo(logo, this.target_id, this.scaleLogo);
         }
 
         public logo_1(alphabet: Alphabet, fine_text: string, pspm: Pspm): Logo {
@@ -34,7 +36,12 @@
          * Specifes that the element with the specified id
          * should be replaced with a generated logo.
         */
-        public replace_logo(logo: Logo, replace_id: string, scale: number, title_txt: string, display_style: string) {
+        public replace_logo(logo: Logo,
+            replace_id: string,
+            scale: number,
+            title_txt: string = "Preview Logo",
+            display_style: string = "block") {
+
             "use strict";
 
             var element: HTMLElement = $ts("#" + replace_id);
@@ -44,17 +51,17 @@
                 return;
             }
 
-            //found the element!
+            // found the element!
             var canvas = CanvasHelper.createCanvas([500, 1200], replace_id, title_txt, display_style);
 
             if (canvas === null) {
                 return;
             }
 
-            //draw the logo on the canvas
+            // draw the logo on the canvas
             this.render.draw_logo_on_canvas.doRender(logo, canvas, null, scale);
 
-            //replace the element with the canvas
+            // replace the element with the canvas
             element.parentNode.replaceChild(canvas, element);
         }
     }

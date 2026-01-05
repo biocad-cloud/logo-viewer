@@ -1,6 +1,11 @@
-﻿/// <reference path="../build/linq.d.ts" />
+﻿/// <reference path="../dev/linq.d.ts" />
 
 namespace viewer {
+
+    /**
+     * math log(2) constant value
+    */
+    export const log2: number = Math.log(2)
 
     /**
      * Fast string trimming implementation found at
@@ -13,10 +18,12 @@ namespace viewer {
     export function trim(str: string): string {
         "use strict";
 
-        var ws: RegExp, i: number;
+        let ws: RegExp = /\s/;
+        let i: number;
+
         str = str.replace(/^\s\s*/, '');
-        ws = /\s/;
         i = str.length;
+
         while (ws.test(str.charAt(--i)));
 
         return str.slice(0, i + 1);
