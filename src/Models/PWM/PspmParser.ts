@@ -1,4 +1,4 @@
-﻿namespace viewer {
+﻿namespace viewer.pwm {
 
     export function parse_pspm_properties(str: string) {
         "use strict";
@@ -148,6 +148,4 @@
             evalue: evalue
         };
     }
-
-
 }

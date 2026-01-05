@@ -1,5 +1,7 @@
 ﻿namespace viewer {
 
+    type Pspm = viewer.pwm.Pspm;
+
     /**
      * Draw motif logo from this function
     */
@@ -16,12 +18,12 @@
             public scaleLogo: number,
             public render: MotifLogo) {
 
-            this.motif = typeof pwm == "string" ? new Pspm(pwm, null) : pwm;
+            this.motif = typeof pwm == "string" ? new viewer.pwm.Pspm(pwm, null) : pwm;
         }
 
         public run() {
             let alpha = new Alphabet("ACGT");
-            let query_pspm = new Pspm(this.motif, null);
+            let query_pspm = new viewer.pwm.Pspm(this.motif, null);
             let logo = this.logo_1(alpha, "MEME Suite", query_pspm);
 
             this.replace_logo(logo, this.target_id, this.scaleLogo);

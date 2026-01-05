@@ -1,5 +1,7 @@
 ﻿namespace viewer {
 
+    type Pspm = viewer.pwm.Pspm;
+
     export class Logo {
 
         public alphabet: Alphabet;

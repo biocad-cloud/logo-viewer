@@ -1,4 +1,4 @@
-﻿namespace viewer {
+﻿namespace viewer.pwm {
 
     export const evalueRegexp: RegExp = /^((?:[+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)|inf)$/;
 

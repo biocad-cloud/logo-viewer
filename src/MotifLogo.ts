@@ -1,5 +1,7 @@
 ﻿namespace viewer {
 
+    type Pspm = viewer.pwm.Pspm;
+
     export class MotifLogo {
 
         public task_queue: LoadQueryTask[] = [];
@@ -25,7 +27,7 @@
         public draw_scale(ctx: CanvasRenderingContext2D, metrics: LogoMetrics, alphabet_ic: number) {
             "use strict";
 
-            var tic_height = metrics.stack_height / alphabet_ic;
+            let tic_height = metrics.stack_height / alphabet_ic;
             ctx.save();
             ctx.lineWidth = 1.5;
             ctx.translate(metrics.y_label_height, metrics.y_num_height / 2);
@@ -50,7 +52,7 @@
             ctx.textAlign = "right";
             ctx.textBaseline = "middle";
 
-            for (var i: number = 0; i <= alphabet_ic; i++) {
+            for (let i: number = 0; i <= alphabet_ic; i++) {
                 //draw the number
                 ctx.fillText("" + i, 0, 0);
                 //draw the tic
